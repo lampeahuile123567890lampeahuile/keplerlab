@@ -254,16 +254,25 @@ function KeplerChart({
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
 
+  // Identifiant unique pour le masque de decoupe SVG
+  const clipId = useRef(`clip-${Math.random().toString(36).slice(2, 9)}`).current
+
   const globalXMin = xData.length > 0 ? Math.min(...xData) : 0
   const globalXMax = xData.length > 0 ? Math.max(...xData) : 1
+  const initialSpan = Math.max(0.1, globalXMax - globalXMin)
+  // Permet de dezoomer jusqu'a 4x plus large ou au moins 30 min
+  const maxSpan = Math.max(initialSpan * 4, 30)
+  const minSpan = 0.05 // ~3 secondes minimum
 
   const [zoomDomain, setZoomDomain] = useState<[number, number] | null>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef<{ startX: number; domainStart: [number, number] } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const zoomDomainRef = useRef<[number, number] | null>(null)
+  zoomDomainRef.current = zoomDomain
 
-  // Reset le zoom si les donnees changent (changement de satellite ou de pas)
+  // Reset le zoom si les donnees changent
   useEffect(() => {
     setZoomDomain(null)
     setHoverIndex(null)
@@ -280,7 +289,7 @@ function KeplerChart({
       visibleIndices.push(i)
     }
   }
-  // Inclusion d'un point avant et apres pour relier le trace aux bords nets du cadre
+  // Inclusion d'un point avant et apres pour relier le trace aux bords
   if (visibleIndices.length > 0) {
     const first = visibleIndices[0]
     if (first > 0 && !visibleIndices.includes(first - 1)) visibleIndices.unshift(first - 1)
@@ -290,7 +299,7 @@ function KeplerChart({
 
   // 2. Resolution adaptative :
   // Si zoome ou peu de points (<= 350 pts) : 100% des points reels sont traces !
-  // Si vue globale tres large (> 350 pts) : sous-echantillonnage pour garder un SVG ultra fluide
+  // Si vue globale tres large (> 350 pts) : echantillonnage pour fluidite
   const isHighDensity = visibleIndices.length <= 350
   const stepDraw = isHighDensity ? 1 : Math.ceil(visibleIndices.length / 250)
 
@@ -325,36 +334,53 @@ function KeplerChart({
       : null
 
   // Fonctions de Zoom et Deplacement
-  const handleZoom = (factor: number) => {
-    const span = curXMax - curXMin
-    // Limite de zoom max : 0.08 min (~5 secondes minimum)
-    if (factor < 1 && span <= 0.08) return
-    const center = (curXMin + curXMax) / 2
+  const handleZoom = useCallback((factor: number) => {
+    const curDomain = zoomDomainRef.current || [globalXMin, globalXMax]
+    const span = curDomain[1] - curDomain[0]
     const newSpan = span * factor
-    let newMin = center - newSpan / 2
-    let newMax = center + newSpan / 2
 
-    if (newSpan >= (globalXMax - globalXMin) || (newMin <= globalXMin && newMax >= globalXMax)) {
+    if (factor < 1 && span <= minSpan) return
+    if (factor > 1 && span >= maxSpan) return
+
+    const center = (curDomain[0] + curDomain[1]) / 2
+    const newMin = center - newSpan / 2
+    const newMax = center + newSpan / 2
+
+    // Si on revient proche de la vue globale initiale
+    if (Math.abs(newSpan - initialSpan) < 0.02 && Math.abs(newMin - globalXMin) < 0.05) {
       setZoomDomain(null)
       return
     }
-    if (newMin < globalXMin) {
-      newMin = globalXMin
-      newMax = Math.min(globalXMax, newMin + newSpan)
-    }
-    if (newMax > globalXMax) {
-      newMax = globalXMax
-      newMin = Math.max(globalXMin, newMax - newSpan)
-    }
     setZoomDomain([newMin, newMax])
-  }
+  }, [globalXMin, globalXMax, initialSpan, maxSpan, minSpan])
 
   const handleReset = () => {
     setZoomDomain(null)
     setHoverIndex(null)
   }
 
-  // Evenements Glisser / Deplacer (Pan)
+  // Interception native de la molette pour NE PAS zoomer la page entiere
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.deltaY < 0) {
+        handleZoom(0.75) // Zoom avant
+      } else {
+        handleZoom(1.33) // Zoom arriere
+      }
+    }
+
+    el.addEventListener('wheel', onWheelNative, { passive: false })
+    return () => {
+      el.removeEventListener('wheel', onWheelNative)
+    }
+  }, [handleZoom])
+
+  // Glisser / Deplacer (Pan)
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     setIsDragging(true)
     dragRef.current = {
@@ -368,23 +394,11 @@ function KeplerChart({
       const dxPx = e.clientX - dragRef.current.startX
       const span = dragRef.current.domainStart[1] - dragRef.current.domainStart[0]
       const dxData = -(dxPx / innerWidth) * span
-
-      let newMin = dragRef.current.domainStart[0] + dxData
-      let newMax = dragRef.current.domainStart[1] + dxData
-
-      if (newMin < globalXMin) {
-        newMin = globalXMin
-        newMax = newMin + span
-      }
-      if (newMax > globalXMax) {
-        newMax = globalXMax
-        newMin = newMax - span
-      }
-      setZoomDomain([newMin, newMax])
+      setZoomDomain([dragRef.current.domainStart[0] + dxData, dragRef.current.domainStart[1] + dxData])
       return
     }
 
-    // Gestion du curseur scientifique (point le plus proche au survol)
+    // Curseur scientifique au survol
     if (svgRef.current && visibleIndices.length > 0) {
       const rect = svgRef.current.getBoundingClientRect()
       const mousePx = ((e.clientX - rect.left) / rect.width) * width
@@ -412,15 +426,6 @@ function KeplerChart({
     dragRef.current = null
   }
 
-  const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault()
-    if (e.deltaY < 0) {
-      handleZoom(0.75) // Zoom avant
-    } else {
-      handleZoom(1.33) // Zoom arriere
-    }
-  }
-
   const isZoomed = zoomDomain !== null
 
   return (
@@ -434,8 +439,8 @@ function KeplerChart({
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-slate-500 mr-1 hidden sm:inline">
             {isZoomed
-              ? `Zoom : ${(curXMax - curXMin).toFixed(1)} min (${visibleIndices.length} points réels)`
-              : 'Vue complète (auto-focus)'}
+              ? `Étendue : ${(curXMax - curXMin).toFixed(1)} min (${visibleIndices.length} points affichés)`
+              : 'Vue complète (centrée)'}
           </span>
           <button
             type="button"
@@ -448,8 +453,7 @@ function KeplerChart({
           <button
             type="button"
             onClick={() => handleZoom(1.5)}
-            disabled={!isZoomed}
-            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700 font-bold"
+            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 font-bold"
             title="Dézoomer (−)"
           >
             −
@@ -477,8 +481,14 @@ function KeplerChart({
           onMouseUpOrLeave()
           setHoverIndex(null)
         }}
-        onWheel={onWheel}
       >
+        <defs>
+          {/* Masque strict : rien ne peut depasser du rectangle de dessin */}
+          <clipPath id={clipId}>
+            <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} />
+          </clipPath>
+        </defs>
+
         {/* Grille horizontale (Y) */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
           const y = margin.top + innerHeight * (1 - t)
@@ -510,60 +520,59 @@ function KeplerChart({
         {/* Cadre du trace */}
         <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="none" stroke="#475569" strokeWidth="1" />
 
-        {/* Ligne de reference moyenne (pour s(t)) */}
-        {refY !== null && (
-          <line
-            x1={margin.left}
-            y1={refY}
-            x2={margin.left + innerWidth}
-            y2={refY}
-            stroke="#64748b"
-            strokeWidth="1.2"
-            strokeDasharray="5,4"
-          />
-        )}
+        {/* Tout ce qui est a l'interieur est strictement decoupe par le clipPath */}
+        <g clipPath={`url(#${clipId})`}>
+          {refY !== null && (
+            <line
+              x1={margin.left}
+              y1={refY}
+              x2={margin.left + innerWidth}
+              y2={refY}
+              stroke="#64748b"
+              strokeWidth="1.2"
+              strokeDasharray="5,4"
+            />
+          )}
 
-        {/* Courbe principale */}
-        <polyline fill="none" stroke={color} strokeWidth="2" points={pointsString} />
+          <polyline fill="none" stroke={color} strokeWidth="2" points={pointsString} />
 
-        {/* Points individuels : affiches des qu'on zoome ou s'il y a peu de points */}
-        {drawIndices.length <= 120 &&
-          drawIndices.map((i) => {
-            const cx = margin.left + ((xData[i] - curXMin) / curXRange) * innerWidth
-            const cy = margin.top + innerHeight - ((yData[i] - yMin) / yRange) * innerHeight
-            return (
-              <circle
-                key={i}
-                cx={cx}
-                cy={cy}
-                r={hoverIndex === i ? 4.5 : 2.5}
-                fill={hoverIndex === i ? '#dc2626' : color}
-              />
-            )
-          })}
-
-        {/* Curseur et Infobulle scientifique au survol */}
-        {hoverIndex !== null && xData[hoverIndex] !== undefined && (
-          <g>
-            {(() => {
-              const hx = margin.left + ((xData[hoverIndex] - curXMin) / curXRange) * innerWidth
-              const hy = margin.top + innerHeight - ((yData[hoverIndex] - yMin) / yRange) * innerHeight
-              const textVal = `${yData[hoverIndex].toFixed(1)} (t = ${xData[hoverIndex].toFixed(2)} min)`
-              const boxWidth = Math.max(140, textVal.length * 7)
-              const boxX = Math.min(margin.left + innerWidth - boxWidth - 5, Math.max(margin.left + 5, hx - boxWidth / 2))
+          {drawIndices.length <= 120 &&
+            drawIndices.map((i) => {
+              const cx = margin.left + ((xData[i] - curXMin) / curXRange) * innerWidth
+              const cy = margin.top + innerHeight - ((yData[i] - yMin) / yRange) * innerHeight
               return (
-                <>
-                  <line x1={hx} y1={margin.top} x2={hx} y2={margin.top + innerHeight} stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3" />
-                  <circle cx={hx} cy={hy} r="4.5" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
-                  <rect x={boxX} y={margin.top + 6} width={boxWidth} height="20" rx="3" fill="#0f172a" fillOpacity="0.85" />
-                  <text x={boxX + boxWidth / 2} y={margin.top + 20} textAnchor="middle" fill="#ffffff" fontSize="10.5" fontFamily="monospace">
-                    {textVal}
-                  </text>
-                </>
+                <circle
+                  key={i}
+                  cx={cx}
+                  cy={cy}
+                  r={hoverIndex === i ? 4.5 : 2.5}
+                  fill={hoverIndex === i ? '#dc2626' : color}
+                />
               )
-            })()}
-          </g>
-        )}
+            })}
+
+          {hoverIndex !== null && xData[hoverIndex] !== undefined && (
+            <g>
+              {(() => {
+                const hx = margin.left + ((xData[hoverIndex] - curXMin) / curXRange) * innerWidth
+                const hy = margin.top + innerHeight - ((yData[hoverIndex] - yMin) / yRange) * innerHeight
+                const textVal = `${yData[hoverIndex].toFixed(1)} (t = ${xData[hoverIndex].toFixed(2)} min)`
+                const boxWidth = Math.max(140, textVal.length * 7)
+                const boxX = Math.min(margin.left + innerWidth - boxWidth - 5, Math.max(margin.left + 5, hx - boxWidth / 2))
+                return (
+                  <>
+                    <line x1={hx} y1={margin.top} x2={hx} y2={margin.top + innerHeight} stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3" />
+                    <circle cx={hx} cy={hy} r="4.5" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
+                    <rect x={boxX} y={margin.top + 6} width={boxWidth} height="20" rx="3" fill="#0f172a" fillOpacity="0.85" />
+                    <text x={boxX + boxWidth / 2} y={margin.top + 20} textAnchor="middle" fill="#ffffff" fontSize="10.5" fontFamily="monospace">
+                      {textVal}
+                    </text>
+                  </>
+                )
+              })()}
+            </g>
+          )}
+        </g>
 
         {/* Labels des axes */}
         <text x={margin.left + innerWidth / 2} y={height - 4} textAnchor="middle" fill="#334155" fontSize="11">
