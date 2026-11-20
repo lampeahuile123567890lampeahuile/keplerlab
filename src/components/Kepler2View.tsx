@@ -254,15 +254,13 @@ function KeplerChart({
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
 
-  // Identifiant unique pour le masque de decoupe SVG
   const clipId = useRef(`clip-${Math.random().toString(36).slice(2, 9)}`).current
 
+  // Bornes réelles strictes des mesures existantes
   const globalXMin = xData.length > 0 ? Math.min(...xData) : 0
   const globalXMax = xData.length > 0 ? Math.max(...xData) : 1
-  const initialSpan = Math.max(0.1, globalXMax - globalXMin)
-  // Permet de dezoomer jusqu'a 4x plus large ou au moins 30 min
-  const maxSpan = Math.max(initialSpan * 4, 30)
-  const minSpan = 0.05 // ~3 secondes minimum
+  const totalSpan = Math.max(0.01, globalXMax - globalXMin)
+  const minSpan = 0.05 // ~3 secondes minimum de zoom max
 
   const [zoomDomain, setZoomDomain] = useState<[number, number] | null>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -272,7 +270,6 @@ function KeplerChart({
   const zoomDomainRef = useRef<[number, number] | null>(null)
   zoomDomainRef.current = zoomDomain
 
-  // Reset le zoom si les donnees changent
   useEffect(() => {
     setZoomDomain(null)
     setHoverIndex(null)
@@ -282,14 +279,13 @@ function KeplerChart({
   const curXMax = zoomDomain ? zoomDomain[1] : globalXMax
   const curXRange = curXMax - curXMin || 1
 
-  // 1. Filtrage des points dans la fenetre visible
+  // 1. Filtrage strict dans la fenêtre visible
   const visibleIndices: number[] = []
   for (let i = 0; i < xData.length; i++) {
     if (xData[i] >= curXMin && xData[i] <= curXMax) {
       visibleIndices.push(i)
     }
   }
-  // Inclusion d'un point avant et apres pour relier le trace aux bords
   if (visibleIndices.length > 0) {
     const first = visibleIndices[0]
     if (first > 0 && !visibleIndices.includes(first - 1)) visibleIndices.unshift(first - 1)
@@ -297,9 +293,7 @@ function KeplerChart({
     if (last < xData.length - 1 && !visibleIndices.includes(last + 1)) visibleIndices.push(last + 1)
   }
 
-  // 2. Resolution adaptative :
-  // Si zoome ou peu de points (<= 350 pts) : 100% des points reels sont traces !
-  // Si vue globale tres large (> 350 pts) : echantillonnage pour fluidite
+  // 2. Résolution : 100% des points tracés
   const isHighDensity = visibleIndices.length <= 350
   const stepDraw = isHighDensity ? 1 : Math.ceil(visibleIndices.length / 250)
 
@@ -311,7 +305,7 @@ function KeplerChart({
     drawIndices.push(visibleIndices[visibleIndices.length - 1])
   }
 
-  // 3. Calcul de l'echelle Y adaptee aux points visibles
+  // 3. Échelle Y adaptée
   const currentYVals = visibleIndices.map((i) => yData[i]).filter((v) => typeof v === 'number' && !isNaN(v))
   const rawYMin = currentYVals.length > 0 ? Math.min(...currentYVals) : 0
   const rawYMax = currentYVals.length > 0 ? Math.max(...currentYVals) : 1
@@ -333,33 +327,41 @@ function KeplerChart({
       ? margin.top + innerHeight - ((referenceLine - yMin) / yRange) * innerHeight
       : null
 
-  // Fonctions de Zoom et Deplacement
+  // Zoom CLAMPÉ aux données réelles : ne dézoome jamais dans le vide
   const handleZoom = useCallback((factor: number) => {
     const curDomain = zoomDomainRef.current || [globalXMin, globalXMax]
     const span = curDomain[1] - curDomain[0]
     const newSpan = span * factor
 
-    if (factor < 1 && span <= minSpan) return
-    if (factor > 1 && span >= maxSpan) return
-
-    const center = (curDomain[0] + curDomain[1]) / 2
-    const newMin = center - newSpan / 2
-    const newMax = center + newSpan / 2
-
-    // Si on revient proche de la vue globale initiale
-    if (Math.abs(newSpan - initialSpan) < 0.02 && Math.abs(newMin - globalXMin) < 0.05) {
+    // Dézoom maximal = 100% des données réelles (jamais au-delà)
+    if (newSpan >= totalSpan) {
       setZoomDomain(null)
       return
     }
+    if (factor < 1 && span <= minSpan) return
+
+    const center = (curDomain[0] + curDomain[1]) / 2
+    let newMin = center - newSpan / 2
+    let newMax = center + newSpan / 2
+
+    // Blocage strict : JAMAIS de temps négatif, JAMAIS de futur vide
+    if (newMin < globalXMin) {
+      newMin = globalXMin
+      newMax = Math.min(globalXMax, newMin + newSpan)
+    }
+    if (newMax > globalXMax) {
+      newMax = globalXMax
+      newMin = Math.max(globalXMin, newMax - newSpan)
+    }
     setZoomDomain([newMin, newMax])
-  }, [globalXMin, globalXMax, initialSpan, maxSpan, minSpan])
+  }, [globalXMin, globalXMax, totalSpan, minSpan])
 
   const handleReset = () => {
     setZoomDomain(null)
     setHoverIndex(null)
   }
 
-  // Interception native de la molette pour NE PAS zoomer la page entiere
+  // Molette sans scroll de page
   useEffect(() => {
     const el = svgRef.current
     if (!el) return
@@ -368,9 +370,9 @@ function KeplerChart({
       e.preventDefault()
       e.stopPropagation()
       if (e.deltaY < 0) {
-        handleZoom(0.75) // Zoom avant
+        handleZoom(0.7)
       } else {
-        handleZoom(1.33) // Zoom arriere
+        handleZoom(1.4)
       }
     }
 
@@ -380,8 +382,9 @@ function KeplerChart({
     }
   }, [handleZoom])
 
-  // Glisser / Deplacer (Pan)
+  // Glisser / Déplacer clampé
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!zoomDomain) return
     setIsDragging(true)
     dragRef.current = {
       startX: e.clientX,
@@ -394,7 +397,18 @@ function KeplerChart({
       const dxPx = e.clientX - dragRef.current.startX
       const span = dragRef.current.domainStart[1] - dragRef.current.domainStart[0]
       const dxData = -(dxPx / innerWidth) * span
-      setZoomDomain([dragRef.current.domainStart[0] + dxData, dragRef.current.domainStart[1] + dxData])
+      let newMin = dragRef.current.domainStart[0] + dxData
+      let newMax = dragRef.current.domainStart[1] + dxData
+
+      if (newMin < globalXMin) {
+        newMin = globalXMin
+        newMax = newMin + span
+      }
+      if (newMax > globalXMax) {
+        newMax = globalXMax
+        newMin = newMax - span
+      }
+      setZoomDomain([newMin, newMax])
       return
     }
 
@@ -435,12 +449,11 @@ function KeplerChart({
           {title}
         </div>
 
-        {/* Commandes simples de navigation */}
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-slate-500 mr-1 hidden sm:inline">
             {isZoomed
-              ? `Étendue : ${(curXMax - curXMin).toFixed(1)} min (${visibleIndices.length} points affichés)`
-              : 'Vue complète (centrée)'}
+              ? `Zoom : ${(curXMax - curXMin).toFixed(1)} min (${visibleIndices.length} points)`
+              : `Vue complète : ${totalSpan.toFixed(1)} min (${xData.length} points)`}
           </span>
           <button
             type="button"
@@ -453,7 +466,8 @@ function KeplerChart({
           <button
             type="button"
             onClick={() => handleZoom(1.5)}
-            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 font-bold"
+            disabled={!isZoomed}
+            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700 font-bold"
             title="Dézoomer (−)"
           >
             −
@@ -463,7 +477,7 @@ function KeplerChart({
             onClick={handleReset}
             disabled={!isZoomed}
             className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700 font-medium"
-            title="Recentrer sur toute la trajectoire"
+            title="Recentrer sur 100% des mesures"
           >
             ↺ Recentrer
           </button>
@@ -473,7 +487,7 @@ function KeplerChart({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`w-full h-auto bg-white rounded ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`w-full h-auto bg-white rounded ${isZoomed ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUpOrLeave}
@@ -483,13 +497,12 @@ function KeplerChart({
         }}
       >
         <defs>
-          {/* Masque strict : rien ne peut depasser du rectangle de dessin */}
           <clipPath id={clipId}>
             <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} />
           </clipPath>
         </defs>
 
-        {/* Grille horizontale (Y) */}
+        {/* Grille Y */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
           const y = margin.top + innerHeight * (1 - t)
           const val = yMin + yRange * t
@@ -503,7 +516,7 @@ function KeplerChart({
           )
         })}
 
-        {/* Grille verticale (X) */}
+        {/* Grille X */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
           const x = margin.left + innerWidth * t
           const val = curXMin + curXRange * t
@@ -517,10 +530,10 @@ function KeplerChart({
           )
         })}
 
-        {/* Cadre du trace */}
+        {/* Cadre */}
         <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="none" stroke="#475569" strokeWidth="1" />
 
-        {/* Tout ce qui est a l'interieur est strictement decoupe par le clipPath */}
+        {/* Contenu strictement découpé par le clipPath */}
         <g clipPath={`url(#${clipId})`}>
           {refY !== null && (
             <line
@@ -590,8 +603,8 @@ function KeplerChart({
         </text>
       </svg>
       <div className="text-[11px] text-slate-400 mt-1 flex justify-between">
-        <span>Molette / glisser pour naviguer sur le graphe</span>
-        <span>Échelle visible : [{curXMin.toFixed(1)} à {curXMax.toFixed(1)} min]</span>
+        <span>Molette pour zoomer / glisser pour naviguer</span>
+        <span>Échelle affichée : [{curXMin.toFixed(1)} à {curXMax.toFixed(1)} min]</span>
       </div>
     </div>
   )
