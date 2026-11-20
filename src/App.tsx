@@ -15,7 +15,7 @@ function App() {
   useEffect(() => {
     fetchSatellites()
     fetchStatus()
-    const interval = setInterval(fetchStatus, 30000)
+    const interval = setInterval(fetchStatus, 20000)
     return () => clearInterval(interval)
   }, [])
 
@@ -66,7 +66,7 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-        <span className="ml-4 text-slate-300">Chargement de l'archive...</span>
+        <span className="ml-4 text-slate-300">Chargement des données...</span>
       </div>
     )
   }
@@ -78,12 +78,13 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <header className="mb-6">
           <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <svg className="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            <svg className="w-9 h-9 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4" strokeWidth={1.5} />
+              <ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-25 12 12)" strokeWidth={1.5} />
             </svg>
-            KeplerLab
+            TP Mécanique 4 — Lois de Kepler
           </h1>
-          <p className="text-slate-400 mt-1">Observatoire Orbital & Lois de Kepler — Données SGP4 / N2YO</p>
+          <p className="text-slate-400 mt-1">Vérification haute fréquence à partir des données satellites de n2yo.com</p>
         </header>
 
         {error && (
