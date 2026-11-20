@@ -44,12 +44,12 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
       } else if (sourceMode === 'n2yo') {
         setPositions([])
         setResult(null)
-        setError("En attente des premières mesures en direct depuis N2YO (clique sur Actualiser ou passe sur 'Orbite complète').")
+        setError("En attente de mesures en direct...")
       } else {
-        setError('Aucune position disponible pour ce satellite.')
+        setError('Aucune position disponible.')
       }
     } catch {
-      setError('Erreur lors du chargement des positions.')
+      setError('Erreur de chargement.')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -87,7 +87,7 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
     <div className="bg-white border border-slate-200 rounded-md p-5">
       <div className="mb-4 pb-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-900">
-          2ᵉ loi de Kepler : loi des aires ({satellite.name})
+          2ᵉ loi de Kepler : {satellite.name}
         </h2>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -96,8 +96,8 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
             onChange={(e) => setSourceMode(e.target.value as 'n2yo' | 'all')}
             className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
-            <option value="n2yo">Temps réel N2YO (en direct)</option>
-            <option value="all">Orbite complète (historique)</option>
+            <option value="n2yo">Direct N2YO</option>
+            <option value="all">Orbite complète</option>
           </select>
 
           <select
@@ -105,8 +105,8 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
             onChange={(e) => setEarthModel(e.target.value as EarthModel)}
             className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
-            <option value="sphere">Terre sphérique (Rt = 6378 km, TP)</option>
-            <option value="wgs84">Terre aplatie (ellipsoïde)</option>
+            <option value="sphere">Terre sphérique (TP)</option>
+            <option value="wgs84">Terre aplatie (WGS84)</option>
           </select>
 
           <select
@@ -114,8 +114,8 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
             onChange={(e) => setAreaMethod(e.target.value as AreaMethod)}
             className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
-            <option value="heron">Formule de Héron (TP)</option>
-            <option value="cross">Produit vectoriel 3D</option>
+            <option value="heron">Formule de Héron</option>
+            <option value="cross">Produit vectoriel</option>
           </select>
 
           <select
@@ -123,12 +123,12 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
             onChange={(e) => setStep(Number(e.target.value))}
             className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
-            <option value={1}>Pas : 1 s</option>
-            <option value={5}>Pas : 5 s</option>
-            <option value={10}>Pas : 10 s</option>
-            <option value={30}>Pas : 30 s</option>
-            <option value={60}>Pas : 60 s</option>
-            <option value={300}>Pas : 5 min (TP)</option>
+            <option value={1}>1 s</option>
+            <option value={5}>5 s</option>
+            <option value={10}>10 s</option>
+            <option value={30}>30 s</option>
+            <option value={60}>60 s</option>
+            <option value={300}>5 min (TP)</option>
           </select>
 
           <button
@@ -136,48 +136,41 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
             disabled={refreshing}
             className="px-3 py-1 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-sm rounded transition-colors"
           >
-            {refreshing ? 'Récupération...' : 'Actualiser N2YO'}
+            {refreshing ? '...' : 'Actualiser'}
           </button>
         </div>
       </div>
 
-      {loading && <p className="text-slate-500 text-sm py-6">Chargement des mesures...</p>}
+      {loading && <p className="text-slate-500 text-sm py-6">Chargement...</p>}
 
       {!loading && (error || !result) && (
         <div className="p-3 bg-amber-50 border border-amber-300 rounded text-amber-900 text-sm">
-          {error || 'Données insuffisantes pour le calcul.'}
+          {error || 'Données insuffisantes.'}
         </div>
       )}
 
       {!loading && result && (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-            <StatBox label="Nombre de mesures" value={result.stats.count.toString()} />
-            <StatBox label="Durée suivie" value={result.stats.durationMin.toFixed(1)} unit="min" />
-            <StatBox label="Rayon min / max" value={`${result.stats.rMin.toFixed(0)} / ${result.stats.rMax.toFixed(0)}`} unit="km" />
-            <StatBox label="Vitesse min / max" value={`${result.stats.vMinKmMin.toFixed(1)} / ${result.stats.vMaxKmMin.toFixed(1)}`} unit="km/min" />
-            <StatBox label="Écart relatif σ(s)/s" value={result.stats.sRelStdPercent.toFixed(3)} unit="%" />
+            <StatBox label="Points" value={result.stats.count.toString()} />
+            <StatBox label="Durée" value={result.stats.durationMin.toFixed(1)} unit="min" />
+            <StatBox label="r min / max" value={`${result.stats.rMin.toFixed(0)} / ${result.stats.rMax.toFixed(0)}`} unit="km" />
+            <StatBox label="v min / max" value={`${result.stats.vMinKmMin.toFixed(1)} / ${result.stats.vMaxKmMin.toFixed(1)}`} unit="km/min" />
+            <StatBox label="σ(s) / s" value={result.stats.sRelStdPercent.toFixed(3)} unit="%" />
           </div>
 
-          <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-slate-900">Résultats et méthode du TP</strong>
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={zeroBaseS}
-                  onChange={(e) => setZeroBaseS(e.target.checked)}
-                />
-                Ordonnée de s(t) partant de 0 (comme dans le script Python)
-              </label>
+          <div className="mb-5 p-3 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              Vitesse aréolaire moyenne : <strong>{Math.round(result.stats.sMean).toLocaleString('fr-FR')} km²/min</strong> — écart relatif : <strong>{result.stats.sRelStdPercent.toFixed(3)} %</strong>
             </div>
-            <p>
-              • Vitesse aréolaire moyenne : <strong>{Math.round(result.stats.sMean).toLocaleString('fr-FR')} km²/min</strong> — dispersion relative : <strong>{result.stats.sRelStdPercent.toFixed(3)} %</strong>{' '}
-              ({result.stats.sRelStdPercent < 1 ? 'constante aux erreurs d’arrondi près' : 'fluctuation notable sur ce pas de temps'}).
-            </p>
-            <p className="text-xs text-slate-500">
-              Calculs : r = h + R<sub>t</sub> (R<sub>t</sub> = 6378 km), correction du jour sidéral J<sub>s</sub> = 1436,066 min, coordonnées 3D (x, y, z), formule de Héron S = √(p(p-a)(p-b)(p-c)), puis vitesse aréolaire s = S / Δt.
-            </p>
+            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={zeroBaseS}
+                onChange={(e) => setZeroBaseS(e.target.checked)}
+              />
+              Axe de s(t) partant de 0
+            </label>
           </div>
 
           <div className="space-y-5 mb-5">
@@ -212,15 +205,15 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => downloadCsv(result, satellite.name)}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded transition-colors"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded transition-colors"
             >
-              Télécharger les données (.csv)
+              Export CSV
             </button>
             <button
               onClick={() => downloadPython(result, satellite.name)}
-              className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded transition-colors"
+              className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded transition-colors"
             >
-              Exporter les listes pour le script Python (.py)
+              Export Python (.py)
             </button>
           </div>
         </>
@@ -256,11 +249,15 @@ function KeplerChart({
 
   const clipId = useRef(`clip-${Math.random().toString(36).slice(2, 9)}`).current
 
-  // Bornes réelles strictes des mesures existantes
   const globalXMin = xData.length > 0 ? Math.min(...xData) : 0
   const globalXMax = xData.length > 0 ? Math.max(...xData) : 1
   const totalSpan = Math.max(0.01, globalXMax - globalXMin)
-  const minSpan = 0.05 // ~3 secondes minimum de zoom max
+  const minSpan = 0.05
+
+  const TARGET_POINTS = 1000
+  const hasManyPoints = xData.length > TARGET_POINTS
+  const defaultXMin = hasManyPoints ? xData[xData.length - TARGET_POINTS] : globalXMin
+  const defaultXMax = globalXMax
 
   const [zoomDomain, setZoomDomain] = useState<[number, number] | null>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -275,11 +272,10 @@ function KeplerChart({
     setHoverIndex(null)
   }, [xData])
 
-  const curXMin = zoomDomain ? zoomDomain[0] : globalXMin
-  const curXMax = zoomDomain ? zoomDomain[1] : globalXMax
+  const curXMin = zoomDomain ? zoomDomain[0] : defaultXMin
+  const curXMax = zoomDomain ? zoomDomain[1] : defaultXMax
   const curXRange = curXMax - curXMin || 1
 
-  // 1. Filtrage strict dans la fenêtre visible
   const visibleIndices: number[] = []
   for (let i = 0; i < xData.length; i++) {
     if (xData[i] >= curXMin && xData[i] <= curXMax) {
@@ -293,8 +289,7 @@ function KeplerChart({
     if (last < xData.length - 1 && !visibleIndices.includes(last + 1)) visibleIndices.push(last + 1)
   }
 
-  // 2. Résolution : 100% des points tracés
-  const isHighDensity = visibleIndices.length <= 350
+  const isHighDensity = visibleIndices.length <= 400
   const stepDraw = isHighDensity ? 1 : Math.ceil(visibleIndices.length / 250)
 
   const drawIndices: number[] = []
@@ -305,7 +300,6 @@ function KeplerChart({
     drawIndices.push(visibleIndices[visibleIndices.length - 1])
   }
 
-  // 3. Échelle Y adaptée
   const currentYVals = visibleIndices.map((i) => yData[i]).filter((v) => typeof v === 'number' && !isNaN(v))
   const rawYMin = currentYVals.length > 0 ? Math.min(...currentYVals) : 0
   const rawYMax = currentYVals.length > 0 ? Math.max(...currentYVals) : 1
@@ -327,15 +321,13 @@ function KeplerChart({
       ? margin.top + innerHeight - ((referenceLine - yMin) / yRange) * innerHeight
       : null
 
-  // Zoom CLAMPÉ aux données réelles : ne dézoome jamais dans le vide
   const handleZoom = useCallback((factor: number) => {
-    const curDomain = zoomDomainRef.current || [globalXMin, globalXMax]
+    const curDomain = zoomDomainRef.current || [defaultXMin, defaultXMax]
     const span = curDomain[1] - curDomain[0]
     const newSpan = span * factor
 
-    // Dézoom maximal = 100% des données réelles (jamais au-delà)
     if (newSpan >= totalSpan) {
-      setZoomDomain(null)
+      setZoomDomain([globalXMin, globalXMax])
       return
     }
     if (factor < 1 && span <= minSpan) return
@@ -344,7 +336,6 @@ function KeplerChart({
     let newMin = center - newSpan / 2
     let newMax = center + newSpan / 2
 
-    // Blocage strict : JAMAIS de temps négatif, JAMAIS de futur vide
     if (newMin < globalXMin) {
       newMin = globalXMin
       newMax = Math.min(globalXMax, newMin + newSpan)
@@ -353,15 +344,15 @@ function KeplerChart({
       newMax = globalXMax
       newMin = Math.max(globalXMin, newMax - newSpan)
     }
+
     setZoomDomain([newMin, newMax])
-  }, [globalXMin, globalXMax, totalSpan, minSpan])
+  }, [defaultXMin, defaultXMax, globalXMin, globalXMax, totalSpan, minSpan])
 
   const handleReset = () => {
     setZoomDomain(null)
     setHoverIndex(null)
   }
 
-  // Molette sans scroll de page
   useEffect(() => {
     const el = svgRef.current
     if (!el) return
@@ -382,9 +373,7 @@ function KeplerChart({
     }
   }, [handleZoom])
 
-  // Glisser / Déplacer clampé
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!zoomDomain) return
     setIsDragging(true)
     dragRef.current = {
       startX: e.clientX,
@@ -412,7 +401,6 @@ function KeplerChart({
       return
     }
 
-    // Curseur scientifique au survol
     if (svgRef.current && visibleIndices.length > 0) {
       const rect = svgRef.current.getBoundingClientRect()
       const mousePx = ((e.clientX - rect.left) / rect.width) * width
@@ -440,7 +428,8 @@ function KeplerChart({
     dragRef.current = null
   }
 
-  const isZoomed = zoomDomain !== null
+  const isAtDefault = zoomDomain === null
+  const canZoomOut = curXMin > globalXMin + 0.01 || curXMax < globalXMax - 0.01
 
   return (
     <div className="border border-slate-200 rounded p-3 bg-white select-none">
@@ -450,36 +439,28 @@ function KeplerChart({
         </div>
 
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-slate-500 mr-1 hidden sm:inline">
-            {isZoomed
-              ? `Zoom : ${(curXMax - curXMin).toFixed(1)} min (${visibleIndices.length} points)`
-              : `Vue complète : ${totalSpan.toFixed(1)} min (${xData.length} points)`}
-          </span>
           <button
             type="button"
             onClick={() => handleZoom(0.65)}
             className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 font-bold"
-            title="Zoomer (+)"
           >
             +
           </button>
           <button
             type="button"
             onClick={() => handleZoom(1.5)}
-            disabled={!isZoomed}
+            disabled={!canZoomOut}
             className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700 font-bold"
-            title="Dézoomer (−)"
           >
             −
           </button>
           <button
             type="button"
             onClick={handleReset}
-            disabled={!isZoomed}
-            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700 font-medium"
-            title="Recentrer sur 100% des mesures"
+            disabled={isAtDefault}
+            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 border border-slate-300 rounded text-slate-700"
           >
-            ↺ Recentrer
+            Recentrer
           </button>
         </div>
       </div>
@@ -487,7 +468,7 @@ function KeplerChart({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`w-full h-auto bg-white rounded ${isZoomed ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+        className={`w-full h-auto bg-white rounded ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUpOrLeave}
@@ -502,7 +483,6 @@ function KeplerChart({
           </clipPath>
         </defs>
 
-        {/* Grille Y */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
           const y = margin.top + innerHeight * (1 - t)
           const val = yMin + yRange * t
@@ -516,7 +496,6 @@ function KeplerChart({
           )
         })}
 
-        {/* Grille X */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
           const x = margin.left + innerWidth * t
           const val = curXMin + curXRange * t
@@ -530,10 +509,8 @@ function KeplerChart({
           )
         })}
 
-        {/* Cadre */}
         <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="none" stroke="#475569" strokeWidth="1" />
 
-        {/* Contenu strictement découpé par le clipPath */}
         <g clipPath={`url(#${clipId})`}>
           {refY !== null && (
             <line
@@ -558,7 +535,7 @@ function KeplerChart({
                   key={i}
                   cx={cx}
                   cy={cy}
-                  r={hoverIndex === i ? 4.5 : 2.5}
+                  r={hoverIndex === i ? 4 : 2}
                   fill={hoverIndex === i ? '#dc2626' : color}
                 />
               )
@@ -569,13 +546,13 @@ function KeplerChart({
               {(() => {
                 const hx = margin.left + ((xData[hoverIndex] - curXMin) / curXRange) * innerWidth
                 const hy = margin.top + innerHeight - ((yData[hoverIndex] - yMin) / yRange) * innerHeight
-                const textVal = `${yData[hoverIndex].toFixed(1)} (t = ${xData[hoverIndex].toFixed(2)} min)`
-                const boxWidth = Math.max(140, textVal.length * 7)
+                const textVal = `${yData[hoverIndex].toFixed(1)} (${xData[hoverIndex].toFixed(1)} min)`
+                const boxWidth = Math.max(120, textVal.length * 7)
                 const boxX = Math.min(margin.left + innerWidth - boxWidth - 5, Math.max(margin.left + 5, hx - boxWidth / 2))
                 return (
                   <>
                     <line x1={hx} y1={margin.top} x2={hx} y2={margin.top + innerHeight} stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3" />
-                    <circle cx={hx} cy={hy} r="4.5" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
+                    <circle cx={hx} cy={hy} r="4" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
                     <rect x={boxX} y={margin.top + 6} width={boxWidth} height="20" rx="3" fill="#0f172a" fillOpacity="0.85" />
                     <text x={boxX + boxWidth / 2} y={margin.top + 20} textAnchor="middle" fill="#ffffff" fontSize="10.5" fontFamily="monospace">
                       {textVal}
@@ -587,7 +564,6 @@ function KeplerChart({
           )}
         </g>
 
-        {/* Labels des axes */}
         <text x={margin.left + innerWidth / 2} y={height - 4} textAnchor="middle" fill="#334155" fontSize="11">
           {xLabel}
         </text>
@@ -602,10 +578,6 @@ function KeplerChart({
           {yLabel}
         </text>
       </svg>
-      <div className="text-[11px] text-slate-400 mt-1 flex justify-between">
-        <span>Molette pour zoomer / glisser pour naviguer</span>
-        <span>Échelle affichée : [{curXMin.toFixed(1)} à {curXMax.toFixed(1)} min]</span>
-      </div>
     </div>
   )
 }
