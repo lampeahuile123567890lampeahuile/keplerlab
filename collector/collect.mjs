@@ -29,7 +29,7 @@ async function collectSatellitePositions(db, sat, apiKey) {
   if (positions.length === 0) return 0;
 
   const insertPos = db.prepare(`
-    INSERT OR IGNORE INTO positions (norad_id, timestamp, lat, lon, altitude_km, source)
+    INSERT OR REPLACE INTO positions (norad_id, timestamp, lat, lon, altitude_km, source)
     VALUES (?, ?, ?, ?, ?, 'n2yo')
   `);
 

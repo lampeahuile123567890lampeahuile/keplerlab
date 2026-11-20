@@ -63,6 +63,8 @@ export function getDb() {
     );
   `);
 
+  db.exec("DELETE FROM satellites WHERE norad_id IN (37820, 39234);");
+
   const insertSat = db.prepare(`
     INSERT OR IGNORE INTO satellites
       (norad_id, name, category, description, perigee_km, apogee_km, eccentricity, period_min, inclination_deg, is_active)

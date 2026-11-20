@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb, getHourlyApiUsage, recordApiUsage } from './db.mjs';
 import { parseTleOrbitalParams, propagateTleToArchive } from './tle_utils.mjs';
 import { seedArchive } from '../collector/seed_archive.mjs';
+import { runCollection } from '../collector/collect.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '..', 'dist');
@@ -20,11 +21,14 @@ const db = getDb();
 seedArchive();
 
 const addRateLimiter = new Map();
+let lastManualCollect = 0;
 
 app.get('/api/status', (_req, res) => {
   const totalPositions = db.prepare('SELECT COUNT(*) as cnt FROM positions').get();
+  const n2yoPositions = db.prepare("SELECT COUNT(*) as cnt FROM positions WHERE source = 'n2yo'").get();
   const totalSatellites = db.prepare('SELECT COUNT(*) as cnt FROM satellites').get();
   const lastPos = db.prepare('SELECT MAX(timestamp) as maxTs FROM positions').get();
+  const lastN2yo = db.prepare("SELECT MAX(timestamp) as maxTs FROM positions WHERE source = 'n2yo'").get();
   const apiUsage = getHourlyApiUsage(db);
   const hasN2yoKey = Boolean(
     process.env.N2YO_API_KEY && process.env.N2YO_API_KEY !== 'votre_cle_api_n2yo_ici'
@@ -34,7 +38,8 @@ app.get('/api/status', (_req, res) => {
     ok: true,
     totalSatellites: Number(totalSatellites?.cnt || 0),
     totalPositions: Number(totalPositions?.cnt || 0),
-    lastTimestamp: lastPos?.maxTs ? Number(lastPos.maxTs) : null,
+    n2yoPositions: Number(n2yoPositions?.cnt || 0),
+    lastTimestamp: lastN2yo?.maxTs ? Number(lastN2yo.maxTs) : (lastPos?.maxTs ? Number(lastPos.maxTs) : null),
     n2yoConfigured: hasN2yoKey,
     n2yoHourlyUsage: apiUsage,
     n2yoHourlyLimit: 1000,
@@ -47,6 +52,7 @@ app.get('/api/satellites', (_req, res) => {
       `
       SELECT s.*,
         (SELECT COUNT(*) FROM positions p WHERE p.norad_id = s.norad_id) as position_count,
+        (SELECT COUNT(*) FROM positions p WHERE p.norad_id = s.norad_id AND p.source = 'n2yo') as n2yo_count,
         (SELECT MIN(timestamp) FROM positions p WHERE p.norad_id = s.norad_id) as min_ts,
         (SELECT MAX(timestamp) FROM positions p WHERE p.norad_id = s.norad_id) as max_ts
       FROM satellites s
@@ -68,18 +74,20 @@ app.get('/api/satellites/:noradId/positions', (req, res) => {
 
   const sat = db.prepare('SELECT * FROM satellites WHERE norad_id = ?').get(noradId);
   if (!sat) {
-    return res.status(404).json({ error: 'Satellite introuvable dans l\'archive.' });
+    return res.status(404).json({ error: "Satellite introuvable dans l'archive." });
   }
 
   const step = Math.max(1, Math.min(3600, Number(req.query.step) || 30));
   const limit = Math.max(10, Math.min(20000, Number(req.query.limit) || 5000));
+  const sourceFilter = req.query.source === 'n2yo' ? 'n2yo' : 'all';
+  const whereSource = sourceFilter === 'n2yo' ? "AND source = 'n2yo'" : '';
 
   const bounds = db
-    .prepare('SELECT MIN(timestamp) as minTs, MAX(timestamp) as maxTs FROM positions WHERE norad_id = ?')
+    .prepare(`SELECT MIN(timestamp) as minTs, MAX(timestamp) as maxTs FROM positions WHERE norad_id = ? ${whereSource}`)
     .get(noradId);
 
   if (!bounds || bounds.minTs === null) {
-    return res.json({ satellite: sat, positions: [], step });
+    return res.json({ satellite: sat, positions: [], step, source: sourceFilter });
   }
 
   const fromTs = req.query.from ? Number(req.query.from) : Number(bounds.minTs);
@@ -91,24 +99,41 @@ app.get('/api/satellites/:noradId/positions', (req, res) => {
       SELECT timestamp, lat, lon, altitude_km, source
       FROM positions
       WHERE norad_id = ?
+        ${whereSource}
         AND timestamp >= ?
         AND timestamp <= ?
         AND ((timestamp - ?) % ? = 0)
-      ORDER BY timestamp ASC
+      ORDER BY timestamp DESC
       LIMIT ?
     `
     )
-    .all(noradId, fromTs, toTs, fromTs, step, limit);
+    .all(noradId, fromTs, toTs, fromTs, step, limit)
+    .reverse();
 
   res.json({
     satellite: sat,
     step,
+    source: sourceFilter,
     minTs: Number(bounds.minTs),
     maxTs: Number(bounds.maxTs),
     positions: rows,
   });
 });
 
+app.post('/api/collect', async (_req, res) => {
+  const now = Date.now();
+  if (now - lastManualCollect < 60 * 1000) {
+    const waitSec = Math.ceil((60 * 1000 - (now - lastManualCollect)) / 1000);
+    return res.json({ ok: true, throttled: true, waitSec, inserted: 0 });
+  }
+  lastManualCollect = now;
+  try {
+    const result = await runCollection();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.post('/api/satellites', async (req, res) => {
   const noradId = Number(req.body?.noradId);
@@ -125,7 +150,7 @@ app.post('/api/satellites', async (req, res) => {
   const now = Date.now();
   const recent = (addRateLimiter.get(ip) || []).filter((t) => now - t < 15 * 60 * 1000);
   if (recent.length >= 10) {
-    return res.status(429).json({ error: 'Trop de requêtes d\'ajout. Réessayez dans quelques minutes.' });
+    return res.status(429).json({ error: "Trop de requêtes d'ajout. Réessayez dans quelques minutes." });
   }
   recent.push(now);
   addRateLimiter.set(ip, recent);
@@ -177,13 +202,13 @@ app.post('/api/satellites', async (req, res) => {
 
   if (!tle1 || !tle2) {
     return res.status(404).json({
-      error: `Impossible de récupérer les paramètres TLE pour le NORAD ID ${noradId}.`,
+      error: `Impossible de récupérer les paramètres pour le NORAD ID ${noradId}.`,
     });
   }
 
   const params = parseTleOrbitalParams(tle1, tle2);
   const category = params.ecc >= 0.05 ? 'elliptical' : 'circular';
-  const desc = `Satellite ajouté via NORAD ID ${noradId} (e = ${params.ecc.toFixed(4)}, T = ${params.periodMin.toFixed(1)} min).`;
+  const desc = `Satellite ajouté (NORAD ${noradId}, e = ${params.ecc.toFixed(3)}, T = ${params.periodMin.toFixed(1)} min).`;
 
   db.prepare(
     `
@@ -211,6 +236,7 @@ app.post('/api/satellites', async (req, res) => {
   );
 
   const inserted = propagateTleToArchive(db, noradId, tle1, tle2, params.periodMin);
+  try { await runCollection(); } catch {}
   const created = db.prepare('SELECT * FROM satellites WHERE norad_id = ?').get(noradId);
 
   res.status(201).json({ satellite: created, positionsSeeded: inserted });
@@ -247,5 +273,10 @@ if (fs.existsSync(DIST_DIR)) {
 
 app.listen(PORT, () => {
   console.log(`[KeplerLab API] Serveur démarré sur http://localhost:${PORT}`);
+  setTimeout(() => {
+    runCollection().catch((e) => console.error('[Collecte init]', e.message));
+  }, 3000);
+  setInterval(() => {
+    runCollection().catch((e) => console.error('[Collecte auto]', e.message));
+  }, 5 * 60 * 1000);
 });
-
