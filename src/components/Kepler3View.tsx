@@ -22,7 +22,7 @@ export default function Kepler3View({ satellites }: Kepler3ViewProps) {
       const items = data.satellites as Kepler3Satellite[]
 
       if (items.length < 2) {
-        setError('Il faut au moins 2 satellites pour faire la regression')
+        setError('Il faut au moins 2 satellites pour tracer la régression.')
         return
       }
 
@@ -49,27 +49,24 @@ export default function Kepler3View({ satellites }: Kepler3ViewProps) {
       const rSquared = rValue * rValue
 
       const yPred = points.map((p) => slope * p.a3 + intercept)
-      const residuals = points.map((p, i) => p.T2 - yPred[i])
-      const ssRes = residuals.reduce((acc, r) => acc + r * r, 0)
+      const ssRes = points.reduce((acc, p, i) => acc + Math.pow(p.T2 - yPred[i], 2), 0)
       const stdError = n > 2 ? Math.sqrt(ssRes / (n - 2)) : 0
 
-      const tStat = rValue !== 0 && rValue !== 1 ? (rValue * Math.sqrt(n - 2)) / Math.sqrt(1 - rValue * rValue) : 0
-      const pValue = 2 * (1 - studentTCdf(Math.abs(tStat), n - 2))
-
-      const G_SI = 6.6743e-11
-      const M_EARTH_REF_KG = 5.9722e24
-      const slopeSi = slope * 1e9
+      // Constante G du TP (6.67e-11 u.S.I.)
+      const G_SI = 6.67e-11
+      const M_EARTH_REF_KG = 5.972e24
+      const slopeSi = slope * 1e9 // conversion s^2/km^3 -> s^2/m^3
       const earthMassKg = slopeSi > 0 ? (4 * Math.PI * Math.PI) / (G_SI * slopeSi) : 0
       const relativeErrorPercent = Math.abs((earthMassKg - M_EARTH_REF_KG) / M_EARTH_REF_KG) * 100
 
-      const equation = 'T² = ' + slope.toExponential(4) + ' * a³ + ' + intercept.toExponential(4)
+      const equation = `T² = ${slope.toExponential(4)} · a³ + ${intercept.toExponential(3)}`
 
       setRegResult({
         slope,
         intercept,
         rValue,
         rSquared,
-        pValue,
+        pValue: 0,
         stdError,
         earthMassKg,
         relativeErrorPercent,
@@ -77,94 +74,144 @@ export default function Kepler3View({ satellites }: Kepler3ViewProps) {
         points,
       })
     } catch (err) {
-      setError('Erreur lors du calcul de la regression')
+      setError('Erreur lors du calcul de la régression.')
       console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  function studentTCdf(t: number, df: number): number {
-    if (df <= 0) return 0.5
-    if (df > 100) return 0.5 * (1 + Math.erf(t / Math.sqrt(2)))
-    const x = df / (t * t + df)
-    return 1 - 0.5 * Math.pow(x, df / 2) * (1 + (df / 2) * (1 - x))
-  }
-
   const displayResult = useMemo(() => {
     if (!regResult) return null
+
+    const width = 760
+    const height = 280
+    const margin = { top: 20, right: 25, bottom: 40, left: 80 }
+    const innerWidth = width - margin.left - margin.right
+    const innerHeight = height - margin.top - margin.bottom
+
+    const xMax = Math.max(...regResult.points.map((p) => p.a3)) * 1.1
+    const yMax = Math.max(...regResult.points.map((p) => p.T2), regResult.slope * xMax + regResult.intercept) * 1.1
+
+    const toPxX = (x: number) => margin.left + (x / (xMax || 1)) * innerWidth
+    const toPxY = (y: number) => margin.top + innerHeight - (y / (yMax || 1)) * innerHeight
+
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          3eme loi de Kepler - Regression T² = f(a³)
+      <div className="bg-white border border-slate-200 rounded-md p-5">
+        <h2 className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          3ᵉ loi de Kepler : régression linéaire T² = f(a³) et masse de la Terre
         </h2>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard label="Pente (T²/a³)" value={regResult.slope.toExponential(4)} unit="s²/km³" />
-          <StatCard label="R²" value={regResult.rSquared.toFixed(6)} />
-          <StatCard label="Masse Terre" value={(regResult.earthMassKg / 1e24).toFixed(2)} unit="x10^24 kg" />
-          <StatCard label="Erreur relative" value={regResult.relativeErrorPercent.toFixed(2)} unit="%" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div className="bg-slate-50 border border-slate-200 rounded p-3">
+            <div className="text-xs text-slate-500">Coefficient directeur</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{regResult.slope.toExponential(4)} s²/km³</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded p-3">
+            <div className="text-xs text-slate-500">Coefficient de corrélation r</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{regResult.rValue.toFixed(6)}</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded p-3">
+            <div className="text-xs text-slate-500">Masse de la Terre déduite</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{regResult.earthMassKg.toExponential(3)} kg</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded p-3">
+            <div className="text-xs text-slate-500">Écart à la valeur officielle</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{regResult.relativeErrorPercent.toFixed(2)} %</div>
+          </div>
         </div>
 
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 mb-6 font-mono text-sm">
-          <div className="text-blue-300">Equation de regression :</div>
-          <div className="text-white mt-1">{regResult.equation}</div>
-          <div className="text-slate-400 mt-1">T en secondes, a en km</div>
+        <div className="border border-slate-200 rounded p-3 bg-white mb-5">
+          <div className="text-sm font-semibold text-slate-800 text-center mb-1">
+            Régression linéaire de T² = f(a³)
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto bg-white">
+            {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+              const y = margin.top + innerHeight * (1 - t)
+              const x = margin.left + innerWidth * t
+              return (
+                <g key={i}>
+                  <line x1={margin.left} y1={y} x2={margin.left + innerWidth} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+                  <line x1={x} y1={margin.top} x2={x} y2={margin.top + innerHeight} stroke="#e2e8f0" strokeWidth="1" />
+                  <text x={margin.left - 8} y={y + 4} textAnchor="end" fill="#475569" fontSize="10">
+                    {(yMax * t).toExponential(1)}
+                  </text>
+                  <text x={x} y={margin.top + innerHeight + 15} textAnchor="middle" fill="#475569" fontSize="10">
+                    {(xMax * t).toExponential(1)}
+                  </text>
+                </g>
+              )
+            })}
+            <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="none" stroke="#475569" strokeWidth="1" />
+            <line
+              x1={toPxX(0)}
+              y1={toPxY(regResult.intercept)}
+              x2={toPxX(xMax)}
+              y2={toPxY(regResult.slope * xMax + regResult.intercept)}
+              stroke="#1f77b4"
+              strokeWidth="2"
+            />
+            {regResult.points.map((p) => {
+              const cx = toPxX(p.a3)
+              const cy = toPxY(p.T2)
+              return (
+                <g key={p.norad_id}>
+                  <line x1={cx - 5} y1={cy} x2={cx + 5} y2={cy} stroke="#dc2626" strokeWidth="2" />
+                  <line x1={cx} y1={cy - 5} x2={cx} y2={cy + 5} stroke="#dc2626" strokeWidth="2" />
+                  <text x={cx + 7} y={cy - 4} fill="#334155" fontSize="10">{p.name}</text>
+                </g>
+              )
+            })}
+            <text x={margin.left + innerWidth / 2} y={height - 4} textAnchor="middle" fill="#334155" fontSize="11">
+              a³ (km³)
+            </text>
+            <text x={16} y={margin.top + innerHeight / 2} textAnchor="middle" fill="#334155" fontSize="11" transform={`rotate(-90 16 ${margin.top + innerHeight / 2})`}>
+              T² (s²)
+            </text>
+          </svg>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="bg-slate-50 border border-slate-200 rounded p-3 mb-5 font-mono text-xs text-slate-800">
+          Équation modèle : <strong>{regResult.equation}</strong> (T en s, a en km) • Formule TP : M<sub>T</sub> = 4π² / (k · G) avec G = 6,67×10⁻¹¹ u.S.I.
+        </div>
+
+        <div className="overflow-x-auto mb-5">
+          <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="text-left text-slate-400 border-b border-slate-700">
-                <th className="pb-2 pr-4">Satellite</th>
-                <th className="pb-2 pr-4">Categorie</th>
-                <th className="pb-2 pr-4">a (km)</th>
-                <th className="pb-2 pr-4">T (min)</th>
-                <th className="pb-2 pr-4">T² (s²)</th>
-                <th className="pb-2 pr-4">a³ (km³)</th>
+              <tr className="text-left text-slate-600 border-b border-slate-200 bg-slate-50">
+                <th className="py-2 px-3">Satellite</th>
+                <th className="py-2 px-3">a (km)</th>
+                <th className="py-2 px-3">T (min)</th>
+                <th className="py-2 px-3">T² (s²)</th>
+                <th className="py-2 px-3">a³ (km³)</th>
               </tr>
             </thead>
             <tbody>
               {regResult.points.map((p) => (
-                <tr key={p.norad_id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                  <td className="py-2 pr-4 text-white">{p.name}</td>
-                  <td className="py-2 pr-4 text-slate-400 capitalize">{p.category}</td>
-                  <td className="py-2 pr-4 text-slate-300">{p.a_km.toLocaleString()}</td>
-                  <td className="py-2 pr-4 text-slate-300">{p.period_min.toFixed(1)}</td>
-                  <td className="py-2 pr-4 font-mono text-slate-300">{p.T2.toExponential(3)}</td>
-                  <td className="py-2 pr-4 font-mono text-slate-300">{p.a3.toExponential(3)}</td>
+                <tr key={p.norad_id} className="border-b border-slate-100">
+                  <td className="py-2 px-3 font-medium text-slate-900">{p.name}</td>
+                  <td className="py-2 px-3 text-slate-700">{p.a_km.toLocaleString('fr-FR')}</td>
+                  <td className="py-2 px-3 text-slate-700">{p.period_min.toFixed(1)}</td>
+                  <td className="py-2 px-3 font-mono text-slate-700">{p.T2.toExponential(3)}</td>
+                  <td className="py-2 px-3 font-mono text-slate-700">{p.a3.toExponential(3)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <div className="mt-6 p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <h3 className="font-semibold text-white mb-2">Interpretation physique</h3>
-          <ul className="text-slate-300 space-y-1 text-sm">
-            <li>• La 3eme loi de Kepler : <strong>T² = (4π²/GM) · a³</strong></li>
-            <li>• Pente theorique attendue : <strong>{(4 * Math.PI * Math.PI / 398600.4418).toExponential(4)} s²/km³</strong> (GM = 398600.4418 km³/s²)</li>
-            <li>• Masse terrestre deducee : <strong>{regResult.earthMassKg.toExponential(3)} kg</strong> (reference : 5.9722x10^24 kg)</li>
-            <li>• Erreur relative : <strong>{regResult.relativeErrorPercent.toFixed(2)}%</strong> {regResult.relativeErrorPercent < 1 ? 'Excellent' : regResult.relativeErrorPercent < 5 ? 'Bon' : 'A ameliorer'}</li>
-            <li>• Coefficient de correlation R = <strong>{regResult.rValue.toFixed(6)}</strong> {regResult.rValue > 0.999 ? 'Correlation quasi-parfaite' : 'Correlation imparfaite'}</li>
-          </ul>
-        </div>
-
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => downloadCsv(regResult)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded transition-colors"
           >
-            Exporter CSV (T², a³)
+            Exporter le tableau (.csv)
           </button>
           <button
             onClick={() => downloadPython(regResult)}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded transition-colors"
           >
-            Exporter Python (regression)
+            Exporter vers 3-loi.py
           </button>
         </div>
       </div>
@@ -173,19 +220,16 @@ export default function Kepler3View({ satellites }: Kepler3ViewProps) {
 
   if (loading) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-4 text-slate-400">
-          <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-          <span>Calcul de la regression...</span>
-        </div>
+      <div className="bg-white border border-slate-200 rounded-md p-5 text-slate-500 text-sm">
+        Calcul de la régression en cours...
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="text-red-400">{error}</div>
+      <div className="bg-white border border-slate-200 rounded-md p-5 text-red-700 text-sm">
+        {error}
       </div>
     )
   }
@@ -193,33 +237,20 @@ export default function Kepler3View({ satellites }: Kepler3ViewProps) {
   return displayResult
 }
 
-function StatCard({ label, value, unit = '' }: { label: string; value: string; unit?: string }) {
-  return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-      <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-bold text-white flex items-baseline gap-1">
-        {value}
-        {unit && <span className="text-sm font-normal text-slate-400">{unit}</span>}
-      </div>
-    </div>
-  )
-}
-
 function downloadCsv(result: Kepler3RegressionResult) {
   const header = 'norad_id,name,category,a_km,period_min,T2_s2,a3_km3\n'
   const lines = result.points.map(
-    (p) => p.norad_id + ',' + p.name + ',' + p.category + ',' + p.a_km.toFixed(2) + ',' + p.period_min.toFixed(2) + ',' + p.T2.toExponential(6) + ',' + p.a3.toExponential(6)
+    (p) => `${p.norad_id},${p.name},${p.category},${p.a_km.toFixed(2)},${p.period_min.toFixed(2)},${p.T2.toExponential(6)},${p.a3.toExponential(6)}`
   )
-  const csv = header + lines.join('\n')
-  downloadFile(csv, 'kepler3_regression.csv', 'text/csv')
+  downloadFile(header + lines.join('\n'), 'kepler3_regression.csv', 'text/csv')
 }
 
 function downloadPython(result: Kepler3RegressionResult) {
   const xVals = result.points.map((p) => p.a3.toExponential(6)).join(', ')
   const yVals = result.points.map((p) => p.T2.toExponential(6)).join(', ')
-  const names = result.points.map((p) => '\"' + p.name + '\"').join(', ')
+  const names = result.points.map((p) => `"${p.name}"`).join(', ')
 
-  const python = '# Regression lineaire 3eme loi de Kepler - Export KeplerLab\n# Genere automatiquement - Donnees SGP4 archivees\n\nimport numpy as np\nfrom scipy import stats\nimport matplotlib.pyplot as plt\n\n# Donnees : a3 (km3) et T2 (s2)\nX = np.array([' + xVals + '])\nY = np.array([' + yVals + '])\nnames = [' + names + ']\n\n# Regression lineaire\nslope, intercept, r_value, p_value, std_error = stats.linregress(X, Y)\nY_model = slope * X + intercept\n\n# Masse de la Terre deducee\nG = 6.6743e-11\nslope_SI = slope * 1e9  # km3/s2 -> m3/s2\nM_earth = (4 * np.pi**2) / (G * slope_SI)\nM_ref = 5.9722e24\nerror_pct = abs(M_earth - M_ref) / M_ref * 100\n\nprint(f\'Pente (T²/a³) = {slope:.6e} s²/km³\')\nprint(f\'Ordonnee a l\'origine = {intercept:.6e} s²\')\nprint(f\'R² = {r_value**2:.6f}\')\nprint(f\'Masse Terre deducee = {M_earth:.3e} kg\')\nprint(f\'Erreur relative = {error_pct:.2f}%\')\nprint(f\'Equation : T² = {slope:.4e} * a³ + {intercept:.4e}\')\n\n# Graphique\nplt.figure(figsize=(10, 8))\nplt.plot(X, Y, \'r+\', markersize=10, label=\'Donnees satellites\')\nplt.plot(X, Y_model, \'b-\', label=f\'Regression (R²={r_value**2:.6f})\')\nfor i, name in enumerate(names):\n    plt.annotate(name, (X[i], Y[i]), textcoords=\'offset points\', xytext=(5,5), fontsize=9)\nplt.xlabel(\'a³ (km³)\')\nplt.ylabel(\'T² (s²)\')\nplt.title(\'3eme loi de Kepler : T² = f(a³)\')\nplt.legend()\nplt.grid(True, alpha=0.3)\nplt.show()\n'
+  const python = `# Regression lineaire 3eme loi de Kepler (TP Mecanique 4)\nimport numpy as np\nfrom scipy import stats\nimport matplotlib.pyplot as plt\n\nX = np.array([${xVals}])  # a^3 en km^3\nY = np.array([${yVals}])  # T^2 en s^2\nnames = [${names}]\n\nslope, intercept, r_value, p_value, std_error = stats.linregress(X, Y)\nYmodel = slope * X + intercept\n\nG = 6.67e-11\nM_terre = (4 * np.pi**2) / (G * slope * 1e9)\nprint('Y =', slope, '* X +', intercept)\nprint('coefficient de correlation r :', r_value)\nprint('Masse Terre calculee (kg) :', M_terre)\n\nplt.figure(figsize=(10, 8))\nplt.plot(X, Y, 'r+', label='Y=f(X)')\nplt.plot(X, Ymodel, 'b-', label='modele lineaire')\nplt.legend()\nplt.xlabel('a^3 (km^3)')\nplt.ylabel('T^2 (s^2)')\nplt.grid()\nplt.title('Regression lineaire de T^2 = f(a^3)')\nplt.show()\n`
   downloadFile(python, 'kepler3_regression.py', 'text/plain')
 }
 

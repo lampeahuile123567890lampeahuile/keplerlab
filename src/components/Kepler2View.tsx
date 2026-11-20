@@ -7,13 +7,13 @@ interface Kepler2ViewProps {
   satellite: Satellite
 }
 
-function StatCard({ label, value, unit = '' }: { label: string; value: string; unit?: string }) {
+function StatBox({ label, value, unit = '' }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-      <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-bold text-white flex items-baseline gap-1">
+    <div className="bg-slate-50 border border-slate-200 rounded p-3">
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
+      <div className="text-lg font-bold text-slate-900">
         {value}
-        {unit && <span className="text-sm font-normal text-slate-400">{unit}</span>}
+        {unit && <span className="text-xs font-normal text-slate-500 ml-1">{unit}</span>}
       </div>
     </div>
   )
@@ -46,11 +46,10 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
         setResult(null)
         setError("En attente des premières mesures en direct depuis N2YO (clique sur Actualiser ou passe sur 'Orbite complète').")
       } else {
-        setError('Aucune position disponible pour ce satellite')
+        setError('Aucune position disponible pour ce satellite.')
       }
-    } catch (err) {
-      setError('Erreur lors du chargement des positions')
-      console.error(err)
+    } catch {
+      setError('Erreur lors du chargement des positions.')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -70,8 +69,7 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
 
   useEffect(() => {
     if (positions.length >= 2) {
-      const res = computeKepler2(positions, earthModel, areaMethod)
-      setResult(res)
+      setResult(computeKepler2(positions, earthModel, areaMethod))
     }
   }, [positions, earthModel, areaMethod])
 
@@ -86,20 +84,17 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          2ᵉ loi de Kepler — Loi des aires
+    <div className="bg-white border border-slate-200 rounded-md p-5">
+      <div className="mb-4 pb-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-slate-900">
+          2ᵉ loi de Kepler : loi des aires ({satellite.name})
         </h2>
 
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={sourceMode}
             onChange={(e) => setSourceMode(e.target.value as 'n2yo' | 'all')}
-            className="bg-slate-800 border border-blue-600/60 rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
             <option value="n2yo">Temps réel N2YO (en direct)</option>
             <option value="all">Orbite complète (historique)</option>
@@ -108,16 +103,16 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
           <select
             value={earthModel}
             onChange={(e) => setEarthModel(e.target.value as EarthModel)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
             <option value="sphere">Terre sphérique (Rt = 6378 km, TP)</option>
-            <option value="wgs84">Terre aplatie (réelle)</option>
+            <option value="wgs84">Terre aplatie (ellipsoïde)</option>
           </select>
 
           <select
             value={areaMethod}
             onChange={(e) => setAreaMethod(e.target.value as AreaMethod)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
             <option value="heron">Formule de Héron (TP)</option>
             <option value="cross">Produit vectoriel 3D</option>
@@ -126,97 +121,89 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
           <select
             value={step}
             onChange={(e) => setStep(Number(e.target.value))}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 text-sm"
           >
-            <option value={1}>1 s</option>
-            <option value={5}>5 s</option>
-            <option value={10}>10 s</option>
-            <option value={30}>30 s</option>
-            <option value={60}>60 s</option>
-            <option value={300}>300 s (5 min TP)</option>
+            <option value={1}>Pas : 1 s</option>
+            <option value={5}>Pas : 5 s</option>
+            <option value={10}>Pas : 10 s</option>
+            <option value={30}>Pas : 30 s</option>
+            <option value={60}>Pas : 60 s</option>
+            <option value={300}>Pas : 5 min (TP)</option>
           </select>
 
           <button
             onClick={handleCollectNow}
             disabled={refreshing}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
+            className="px-3 py-1 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-sm rounded transition-colors"
           >
             {refreshing ? 'Récupération...' : 'Actualiser N2YO'}
           </button>
         </div>
       </div>
 
-      {loading && (
-        <div className="flex items-center gap-4 text-slate-400 py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-          <span>Chargement des mesures...</span>
-        </div>
-      )}
+      {loading && <p className="text-slate-500 text-sm py-6">Chargement des mesures...</p>}
 
       {!loading && (error || !result) && (
-        <div className="p-4 bg-amber-900/20 border border-amber-700/60 rounded-lg text-amber-200 text-sm">
-          {error || 'Données insuffisantes pour le calcul'}
+        <div className="p-3 bg-amber-50 border border-amber-300 rounded text-amber-900 text-sm">
+          {error || 'Données insuffisantes pour le calcul.'}
         </div>
       )}
 
       {!loading && result && (
         <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard label="Mesures" value={result.stats.count.toString()} />
-            <StatCard label="Durée suivie" value={result.stats.durationMin.toFixed(1)} unit="min" />
-            <StatCard label="Rayon min / max" value={`${result.stats.rMin.toFixed(0)} / ${result.stats.rMax.toFixed(0)}`} unit="km" />
-            <StatCard label="Vitesse min / max" value={`${result.stats.vMinKmMin.toFixed(1)} / ${result.stats.vMaxKmMin.toFixed(1)}`} unit="km/min" />
-            <StatCard label="Écart relatif sur s" value={result.stats.sRelStdPercent.toFixed(3)} unit="%" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+            <StatBox label="Nombre de mesures" value={result.stats.count.toString()} />
+            <StatBox label="Durée suivie" value={result.stats.durationMin.toFixed(1)} unit="min" />
+            <StatBox label="Rayon min / max" value={`${result.stats.rMin.toFixed(0)} / ${result.stats.rMax.toFixed(0)}`} unit="km" />
+            <StatBox label="Vitesse min / max" value={`${result.stats.vMinKmMin.toFixed(1)} / ${result.stats.vMaxKmMin.toFixed(1)}`} unit="km/min" />
+            <StatBox label="Écart relatif σ(s)/s" value={result.stats.sRelStdPercent.toFixed(3)} unit="%" />
           </div>
 
-          <div className="mb-6 p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <h3 className="font-semibold text-white">Conclusion sur la 2ᵉ loi de Kepler</h3>
-              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+          <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-slate-900">Résultats et méthode du TP</strong>
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={zeroBaseS}
                   onChange={(e) => setZeroBaseS(e.target.checked)}
-                  className="rounded border-slate-600"
                 />
-                Axe de s(t) partant de 0 (comme dans le script du TP)
+                Ordonnée de s(t) partant de 0 (comme dans le script Python)
               </label>
             </div>
-            <ul className="text-slate-300 space-y-1 text-sm">
-              <li>
-                • Vitesse aréolaire moyenne : <strong>{Math.round(result.stats.sMean).toLocaleString('fr-FR')} km²/min</strong>
-              </li>
-              <li>
-                • Variation relative autour de la moyenne : <strong>{result.stats.sRelStdPercent.toFixed(3)} %</strong>{' '}
-                ({result.stats.sRelStdPercent < 1 ? 'vitesse aréolaire bien constante — loi vérifiée' : 'fluctuation notable sur ce pas de temps'})
-              </li>
-            </ul>
+            <p>
+              • Vitesse aréolaire moyenne : <strong>{Math.round(result.stats.sMean).toLocaleString('fr-FR')} km²/min</strong> — dispersion relative : <strong>{result.stats.sRelStdPercent.toFixed(3)} %</strong>{' '}
+              ({result.stats.sRelStdPercent < 1 ? 'constante aux erreurs d’arrondi près' : 'fluctuation notable sur ce pas de temps'}).
+            </p>
+            <p className="text-xs text-slate-500">
+              Calculs repris de <code>2e loi de Kepler 2026.py</code> : r = h + R<sub>t</sub> (R<sub>t</sub> = 6378 km), correction du jour sidéral J<sub>s</sub> = 1436,066 min (ω = 360/J<sub>s</sub>), passage en coordonnées cartésiennes géocentriques (x, y, z), aire du triangle par Héron S = √(p(p-a)(p-b)(p-c)), puis s = S / Δt.
+            </p>
           </div>
 
-          <div className="space-y-6 mb-6">
+          <div className="space-y-5 mb-5">
             <KeplerChart
-              title="Rayon r(t) — Distance au centre de la Terre"
-              xLabel="Temps (min)"
-              yLabel="Rayon (km)"
+              title="Rayon en fonction du temps"
+              xLabel="temps en min"
+              yLabel="rayon en km"
               xData={result.t}
               yData={result.r}
-              color="blue"
+              color="#1f77b4"
             />
             <KeplerChart
-              title="Vitesse v(t) — Vitesse du satellite"
-              xLabel="Temps (min)"
-              yLabel="Vitesse (km/min)"
+              title="Vitesse en fonction du temps"
+              xLabel="temps en min"
+              yLabel="vitesse en km/min"
               xData={result.tt}
               yData={result.v}
-              color="amber"
+              color="#d97706"
             />
             <KeplerChart
-              title="Vitesse aréolaire s(t) — Doit être constante"
-              xLabel="Temps (min)"
-              yLabel="Vitesse aréolaire (km²/min)"
+              title="Vitesse aréolaire en fonction du temps"
+              xLabel="temps en min"
+              yLabel="vitesse aréolaire en km²/min"
               xData={result.tt}
               yData={result.s}
-              color="green"
+              color="#16a34a"
               referenceLine={result.stats.sMean}
               startAtZero={zeroBaseS}
             />
@@ -225,15 +212,15 @@ export default function Kepler2View({ satellite }: Kepler2ViewProps) {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => downloadCsv(result, satellite.name)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded transition-colors"
             >
-              Exporter en CSV
+              Télécharger les données (.csv)
             </button>
             <button
               onClick={() => downloadPython(result, satellite.name)}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+              className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded transition-colors"
             >
-              Exporter en listes Python (pour le script du TP)
+              Exporter les listes pour le script Python (.py)
             </button>
           </div>
         </>
@@ -257,16 +244,13 @@ function KeplerChart({
   yLabel: string
   xData: number[]
   yData: number[]
-  color: 'blue' | 'amber' | 'green'
+  color: string
   referenceLine?: number
   startAtZero?: boolean
 }) {
-  const colorMap = { blue: '#3b82f6', amber: '#f59e0b', green: '#22c55e' }
-  const strokeColor = colorMap[color]
-
   const width = 760
-  const height = 220
-  const margin = { top: 20, right: 20, bottom: 30, left: 65 }
+  const height = 240
+  const margin = { top: 20, right: 20, bottom: 38, left: 72 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
 
@@ -298,41 +282,78 @@ function KeplerChart({
       ? margin.top + innerHeight - ((referenceLine - yMin) / yRange) * innerHeight
       : null
 
+  const yTicks = [0, 0.25, 0.5, 0.75, 1]
+  const xTicks = [0, 0.25, 0.5, 0.75, 1]
+
   return (
-    <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
-      <h4 className="font-medium text-white mb-3">{title}</h4>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto bg-slate-900/60 rounded">
-        <line x1={margin.left} y1={margin.top} x2={margin.left} y2={margin.top + innerHeight} stroke="rgba(148,163,184,0.4)" strokeWidth="1" />
-        <line x1={margin.left} y1={margin.top + innerHeight} x2={margin.left + innerWidth} y2={margin.top + innerHeight} stroke="rgba(148,163,184,0.4)" strokeWidth="1" />
-        <text x={margin.left - 8} y={margin.top + 8} textAnchor="end" fill="#94a3b8" fontSize="11">{yMax.toFixed(0)}</text>
-        <text x={margin.left - 8} y={margin.top + innerHeight} textAnchor="end" fill="#94a3b8" fontSize="11">{yMin.toFixed(0)}</text>
+    <div className="border border-slate-200 rounded p-3 bg-white">
+      <div className="text-sm font-semibold text-slate-800 text-center mb-1">{title}</div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto bg-white">
+        {yTicks.map((t, idx) => {
+          const y = margin.top + innerHeight * (1 - t)
+          const val = yMin + yRange * t
+          return (
+            <g key={`y-${idx}`}>
+              <line x1={margin.left} y1={y} x2={margin.left + innerWidth} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+              <text x={margin.left - 8} y={y + 4} textAnchor="end" fill="#475569" fontSize="10.5">
+                {Math.round(val).toLocaleString('fr-FR')}
+              </text>
+            </g>
+          )
+        })}
+        {xTicks.map((t, idx) => {
+          const x = margin.left + innerWidth * t
+          const val = xMin + xRange * t
+          return (
+            <g key={`x-${idx}`}>
+              <line x1={x} y1={margin.top} x2={x} y2={margin.top + innerHeight} stroke="#e2e8f0" strokeWidth="1" />
+              <text x={x} y={margin.top + innerHeight + 15} textAnchor="middle" fill="#475569" fontSize="10.5">
+                {val.toFixed(1)}
+              </text>
+            </g>
+          )
+        })}
+
+        <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="none" stroke="#475569" strokeWidth="1" />
+
         {refY !== null && (
           <line
             x1={margin.left}
             y1={refY}
             x2={margin.left + innerWidth}
             y2={refY}
-            stroke="rgba(34,197,94,0.6)"
-            strokeWidth="1.5"
-            strokeDasharray="6,4"
+            stroke="#64748b"
+            strokeWidth="1.2"
+            strokeDasharray="5,4"
           />
         )}
-        <polyline fill="none" stroke={strokeColor} strokeWidth="2.2" points={points} />
-        {indices.length <= 80 &&
+
+        <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
+        {indices.length <= 70 &&
           indices.map((i) => (
             <circle
               key={i}
               cx={margin.left + ((xData[i] - xMin) / xRange) * innerWidth}
               cy={margin.top + innerHeight - ((yData[i] - yMin) / yRange) * innerHeight}
               r="2.5"
-              fill={strokeColor}
+              fill={color}
             />
           ))}
+
+        <text x={margin.left + innerWidth / 2} y={height - 4} textAnchor="middle" fill="#334155" fontSize="11">
+          {xLabel}
+        </text>
+        <text
+          x={14}
+          y={margin.top + innerHeight / 2}
+          textAnchor="middle"
+          fill="#334155"
+          fontSize="11"
+          transform={`rotate(-90 14 ${margin.top + innerHeight / 2})`}
+        >
+          {yLabel}
+        </text>
       </svg>
-      <div className="flex justify-between text-xs text-slate-400 mt-2">
-        <span>{xLabel} : {xMin.toFixed(1)} → {xMax.toFixed(1)}</span>
-        <span>{yLabel} : {rawYMin.toFixed(1)} → {rawYMax.toFixed(1)}</span>
-      </div>
     </div>
   )
 }
